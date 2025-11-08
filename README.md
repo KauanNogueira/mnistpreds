@@ -1,136 +1,82 @@
+# MNIST Handwritten Digit Recognition
 
-# MNIST Handwritten Digit Recognition using a Linear Classifier
-
-This repository contains the source code for a simple handwritten digit recognition system using a linear classifier implemented in PyTorch. The system is trained and evaluated on the MNIST dataset.
+This repository contains the source code for a handwritten digit recognition system using a linear classifier implemented in PyTorch, trained on the MNIST dataset. The project provides tools for training, batch prediction, and an interactive web-based interface for real-time digit recognition.
 
 ## 1. Introduction
 
-The MNIST dataset is a large database of handwritten digits that is commonly used for training and testing various image processing systems. This project aims to build a simple yet effective system for recognizing these handwritten digits. We employ a linear classifier, a fundamental building block in machine learning, to achieve this task.
+The MNIST dataset is a cornerstone in the field of machine learning, comprising a large collection of handwritten digits used for training and evaluating image processing systems. This project implements a foundational linear classifier to recognize these digits, offering a clear and functional example of a complete machine learning workflow from training to interactive prediction.
 
-## 2. The Model
+## 2. System Components
 
-The core of our system is a linear classifier model. This model takes a flattened 28x28 pixel image (784 features) as input and outputs a vector of 10 scores, one for each digit (0-9). The digit with the highest score is the model's prediction.
+The project is structured into several key components:
 
-### 2.1. Mathematical Formulation
+-   **`model.py`**: Defines the neural network architecture, a simple `LinearClassifierModel` that takes flattened 28x28 pixel images as input and outputs scores for each of the 10 digits (0-9).
+-   **`train.py`**: A script for training the linear model. It utilizes the MNIST training dataset, Cross-Entropy Loss, and the SGD optimizer. Upon completion, it saves the trained model's state dictionary to a `.pth` file.
+-   **`predict.py`**: A command-line script that loads a pre-trained model to perform predictions on a randomly selected grid of 9 images from the MNIST test set. The results, comparing predictions to true labels, are saved as a PNG image.
+-   **`server.py`**: A Flask-based web server that exposes endpoints to list available models and to perform predictions on image data sent from a client.
+-   **`index.html`**: A self-contained web application that provides a canvas for users to draw digits. It captures the drawing, sends it to the Flask server, and displays the model's prediction and activation flow in real-time.
 
-The linear classifier is defined by the following equation:
+## 3. How to Use
 
-$$
-y = Wx + b
-$$
+### 3.1. Prerequisites
 
-where:
+-   Python 3.x
+-   pip
 
--   $y$ is the output vector of scores (10x1).
--   $W$ is the weight matrix (10x784).
--   $x$ is the input vector of pixel intensities (784x1).
--   $b$ is the bias vector (10x1).
+### 3.2. Installation
 
-The model learns the optimal values for $W$ and $b$ during the training process.
+1.  Clone the repository to your local machine.
+2.  Install the required Python packages using `requirements.txt`:
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-### 2.2. Implementation
+### 3.3. Training a New Model
 
-The model is implemented using the `torch.nn.Module` class in PyTorch. The `LinearClassifierModel` class defines the model architecture, which consists of a flattening layer followed by a single linear layer.
+1.  Run the training script. The script will automatically download the MNIST dataset to a `data/` directory.
+    ```bash
+    python train.py
+    ```
+2.  The trained model (e.g., `model300e.pth`) will be saved in the project's root directory. For the web interface to find it, create a `models/` directory and move the `.pth` file into it.
 
-```python
-class LinearClassifierModel(nn.Module):
-    def __init__(self, input_feat, output_feat):
-        super().__init__()
-        self.flatten = nn.Flatten()
-        self.linear_layer = nn.Linear(input_feat, output_feat)
+### 3.4. Running Predictions
 
-    def forward(self, x):
-        x_flattened = self.flatten(x)
-        return self.linear_layer(x_flattened)
+There are two ways to perform predictions: via the command line for batch processing or through the interactive web interface.
+
+#### Option 1: Command-Line Batch Prediction
+
+This method is useful for quickly evaluating a model on a random set of test images. It does not require running the web server.
+
+1.  Make sure you have a trained model file (e.g., `model80e.pth`) inside the `models/` directory. You may need to update the `MODEL_SAVE_PATH` variable in `predict.py` to point to your desired model.
+2.  Execute the prediction script:
+    ```bash
+    python predict.py
+    ```
+3.  The output is an image file named `mnist_predictions.png` (by default) that shows a grid of digits with their predicted and true labels. The script randomly selects different digits from the test set each time it is run.
+
+#### Option 2: Interactive Web Interface
+
+This method provides a dynamic, real-time prediction experience by allowing you to draw digits and see the model's response instantly.
+
+1.  Start the Flask web server:
+    ```bash
+    python server.py
+    ```
+2.  Once the server is running, open the `index.html` file in your web browser.
+3.  Select an available model from the dropdown menu, draw a digit on the canvas, and the model's prediction will appear alongside a visualization of the neuron activations.
+
+## 4. Project File Structure
+
 ```
-
-## 3. Training
-
-The model is trained using the training set of the MNIST dataset. The training process involves iterating over the dataset multiple times (epochs) and updating the model's parameters to minimize the loss function.
-
-### 3.1. Loss Function
-
-We use the Cross-Entropy Loss function, which is commonly used for multi-class classification problems. The Cross-Entropy Loss is defined as:
-
-$$
-L = -\frac{1}{N} \sum_{i=1}^{N} \sum_{j=1}^{C} y_{ij} \log(\hat{y}_{ij})
-$$
-
-where:
-
--   $N$ is the number of samples.
--   $C$ is the number of classes (10 in our case).
--   $y_{ij}$ is 1 if sample $i$ belongs to class $j$ and 0 otherwise.
--   $\hat{y}_{ij}$ is the predicted probability of sample $i$ belonging to class $j$.
-
-### 3.2. Optimization
-
-We use the Stochastic Gradient Descent (SGD) optimizer to update the model's parameters. The SGD optimizer updates the parameters in the opposite direction of the gradient of the loss function.
-
-### 3.3. The `train_model` function
-
-The `train_model` function encapsulates the training loop. It iterates over the training data for a specified number of epochs, calculates the loss, and updates the model's parameters using the optimizer. It also evaluates the model on the test data at the end of each epoch.
-
-```python
-def train_model(model, epochs, optimizer):
-    print(f'Starting training for {epochs} epochs...')
-    model.to(device)
-    for epoch in range(epochs):
-        model.train()
-        train_loss = 0.0
-
-        for X, y in train_dataloader:
-            X, y = X.to(device), y.to(device)
-
-            y_pred_logits = model(X)
-
-            loss = loss_fn(y_pred_logits, y)
-            train_loss += loss.item()
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        train_loss /= len(train_dataloader)
-
-        model.eval()
-        test_loss = 0.0
-        with torch.inference_mode():
-            for X_test_batch, y_test_batch in test_dataloader:
-                X_test_batch, y_test_batch = X_test_batch.to(device), y_test_batch.to(device)
-
-                y_test_logits = model(X_test_batch)
-
-                loss += loss_fn(y_test_logits, y_test_batch).item()
-
-            test_loss /= len(test_dataloader)
-
-        if epoch % 5 == 0 or epoch == epochs - 1:
-            print(f"Epoch {epoch}: Train loss: {train_loss:.4f}, Test loss: {test_loss:.4f}")
-
-    print("Training complete.")
-    return model
+/
+├─── data/              # MNIST dataset (auto-downloaded)
+├─── models/            # Directory for saved .pth model files
+├─── .gitignore         # Git ignore file
+├─── index.html         # Frontend for interactive predictions
+├─── model.py           # Defines the PyTorch model architecture
+├─── predict.py         # Script for batch predictions on test data
+├─── README.md          # This file
+├─── requirements.txt   # Python dependencies
+├─── server.py          # Flask backend for serving predictions
+└─── train.py           # Script for training the model
 ```
-
-## 4. Results
-
-After training the model for 20 epochs, we can visualize the model's predictions on a random sample of 9 images from the test set. The `plot_predictions` function is used for this purpose.
-
-![MNIST Predictions](./mnist_predictions.png)
-
-The title of each subplot shows the predicted label and the true label. The color of the title is green if the prediction is correct and red otherwise.
-
-## 5. How to Run
-
-To run the code, you need to have Python and PyTorch installed. You can install the required packages using the following command:
-
-```bash
-pip install -r requirements.txt
-```
-
-Then, you can run the `main.py` file:
-
-```bash
-python main.py
-```
-
-This will train the model and save the prediction plot to `mnist_predictions.png`.
