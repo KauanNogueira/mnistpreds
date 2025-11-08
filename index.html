@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>MNIST - Digit Recognition</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;700&display=swap');
+        :root {
+            --background-color: #1a1a1a;
+            --primary-text-color: #e0e0e0;
+            --secondary-text-color: #b3b3b3;
+            --canvas-background: #000000;
+            --border-color: #444;
+            --accent-color: #007bff;
+            --danger-color: #dc3545;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: var(--background-color);
+            color: var(--primary-text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+
+        /* On wider screens, switch to a side-by-side layout */
+        @media (min-width: 900px) {
+            .main-container {
+                flex-direction: row;
+                align-items: flex-start;
+                flex-wrap: nowrap;
+            }
+        }
+
+        .container { text-align: center; width: 100%; max-width: 400px; }
+        h1 { font-weight: 700; font-size: 2rem; margin-bottom: 10px; }
+        p { font-weight: 300; color: var(--secondary-text-color); margin-bottom: 20px; }
+        .model-selection { margin-bottom: 20px; }
+        #model-selector {
+            font-family: 'Roboto Mono', monospace;
+            background-color: var(--border-color);
+            color: var(--primary-text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 8px;
+            font-size: 0.9rem;
+        }
+        #drawing-canvas {
+            background-color: var(--canvas-background);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        .controls { margin-top: 20px; }
+        .btn {
+            font-family: 'Roboto Mono', monospace;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            color: white;
+        }
+        #clear-btn { background-color: var(--danger-color); }
+        
+        #prediction-result {
+            margin-top: 20px;
+            font-size: 2rem;
+            font-weight: 700;
+            height: 40px;
+        }
+
+        .visualization-container { text-align: center; }
+        .visualization-container h2 { font-size: 1.2rem; }
+        .visualization-container p { font-size: 0.9rem; }
+        #nn-visualization { border: 2px solid var(--border-color); border-radius: 8px; margin-top: 10px; }
+
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="container">
+            <h1>MNIST Predictor</h1>
+            <p>The model will predict as you draw.</p>
+            
+            <div class="model-selection">
+                <label for="model-selector">Choose Model:</label>
+                <select id="model-selector"></select>
+            </div>
+
+            <canvas id="drawing-canvas" width="336" height="336"></canvas>
+            <canvas id="scaled-canvas" width="28" height="28" style="display: none;"></canvas>
+            
+            <div class="controls">
+                <button id="clear-btn" class="btn">Clear</button>
+            </div>
+        </div>
+
+        <div class="visualization-container">
+            <h2>Activation Flow</h2>
+            <p>From input to model's prediction.</p>
+            <canvas id="nn-visualization" width="400" height="400"></canvas>
+            <div id="prediction-result"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const modelSelector = document.getElementById('model-selector');
+            const drawingCanvas = document.getElementById('drawing-canvas');
+            const scaledCanvas = document.getElementById('scaled-canvas');
+            const clearBtn = document.getElementById('clear-btn');
+            const predictionResult = document.getElementById('prediction-result');
+            const visCanvas = document.getElementById('nn-visualization');
+
+            const d_ctx = drawingCanvas.getContext('2d');
+            const s_ctx = scaledCanvas.getContext('2d');
+            const v_ctx = visCanvas.getContext('2d');
+            let isDrawing = false;
+
+            d_ctx.strokeStyle = 'white';
+            d_ctx.lineWidth = 24;
+            d_ctx.lineCap = 'round';
+            d_ctx.lineJoin = 'round';
+
+            function debounce(func, delay) {
+                let timeout;
+                return function(...args) {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(this, args), delay);
+                };
+            }
+
+            function populateModels() {
+                fetch('http://localhost:5000/models')
+                    .then(response => response.json())
+                    .then(models => {
+                        if (models.length === 0) { predictionResult.textContent = "No models found."; return; }
+                        modelSelector.innerHTML = '';
+                        models.forEach(modelName => {
+                            const option = document.createElement('option');
+                            option.value = modelName;
+                            option.textContent = modelName;
+                            modelSelector.appendChild(option);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Failed to fetch models:', error);
+                        predictionResult.textContent = "Server connection failed.";
+                    });
+            }
+
+            function getPosition(event) {
+                const rect = drawingCanvas.getBoundingClientRect();
+                if (event.touches && event.touches.length > 0) {
+                    return { x: event.touches[0].clientX - rect.left, y: event.touches[0].clientY - rect.top };
+                }
+                return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+            }
+
+            function startDrawing(event) {
+                isDrawing = true;
+                const { x, y } = getPosition(event);
+                d_ctx.beginPath();
+                d_ctx.moveTo(x, y);
+                event.preventDefault();
+            }
+
+            function draw(event) {
+                if (!isDrawing) return;
+                const { x, y } = getPosition(event);
+                d_ctx.lineTo(x, y);
+                d_ctx.stroke();
+                debouncedPredict();
+                event.preventDefault();
+            }
+
+            function stopDrawing() {
+                isDrawing = false;
+                d_ctx.closePath();
+            }
+
+            function clearCanvas() {
+                d_ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                s_ctx.clearRect(0, 0, scaledCanvas.width, scaledCanvas.height);
+                predictionResult.textContent = '';
+                drawVisualization(new Array(10).fill(0), scaledCanvas);
+            }
+
+            function drawVisualization(probabilities, inputCanvas) {
+                v_ctx.clearRect(0, 0, visCanvas.width, visCanvas.height);
+                
+                const inputImgSize = 112; // 28 * 4
+                const inputX = 40;
+                const inputY = (visCanvas.height - inputImgSize) / 2;
+
+                v_ctx.imageSmoothingEnabled = false;
+                v_ctx.drawImage(inputCanvas, inputX, inputY, inputImgSize, inputImgSize);
+                v_ctx.strokeStyle = 'white';
+                v_ctx.lineWidth = 1;
+                v_ctx.strokeRect(inputX -1, inputY -1, inputImgSize + 2, inputImgSize + 2);
+
+                const outputX = visCanvas.width - 80;
+                const neuronRadius = 12;
+                const startY = 40;
+                const yStep = (visCanvas.height - (2 * startY)) / 9;
+
+                for (let i = 0; i < 10; i++) {
+                    const prob = probabilities[i];
+                    const neuronY = startY + i * yStep;
+
+                    // Draw connection lines
+                    v_ctx.beginPath();
+                    v_ctx.moveTo(inputX + inputImgSize, inputY + inputImgSize / 2);
+                    v_ctx.lineTo(outputX, neuronY);
+                    v_ctx.lineWidth = 0.5 + prob * 8;
+                    v_ctx.strokeStyle = `rgba(0, 191, 255, ${0.1 + prob * 0.8})`;
+                    v_ctx.stroke();
+                }
+
+                for (let i = 0; i < 10; i++) {
+                    const prob = probabilities[i];
+                    const neuronY = startY + i * yStep;
+                    const r = 0, g = 191, b = 255;
+                    
+                    // Draw neuron circle
+                    v_ctx.beginPath();
+                    v_ctx.arc(outputX, neuronY, neuronRadius, 0, 2 * Math.PI);
+                    v_ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${prob})`;
+                    v_ctx.fill();
+                    
+                    v_ctx.beginPath();
+                    v_ctx.arc(outputX, neuronY, neuronRadius, 0, 2 * Math.PI);
+                    v_ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+                    v_ctx.lineWidth = 2;
+                    v_ctx.stroke();
+
+                    // Draw label
+                    v_ctx.fillStyle = prob > 0.5 ? 'black' : 'white';
+                    v_ctx.font = 'bold 14px Roboto Mono';
+                    v_ctx.textAlign = 'center';
+                    v_ctx.textBaseline = 'middle';
+                    v_ctx.fillText(i, outputX, neuronY);
+                }
+            }
+
+            function predict() {
+                const modelName = modelSelector.value;
+                if (!modelName) return;
+
+                s_ctx.clearRect(0, 0, scaledCanvas.width, scaledCanvas.height);
+                s_ctx.drawImage(drawingCanvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
+                const imageData = s_ctx.getImageData(0, 0, scaledCanvas.width, scaledCanvas.height);
+                const grayscaleData = [];
+                for (let i = 3; i < imageData.data.length; i += 4) {
+                    grayscaleData.push(imageData.data[i]);
+                }
+                
+                fetch('http://localhost:5000/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: grayscaleData, model_name: modelName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.prediction !== undefined && data.probabilities) {
+                        predictionResult.textContent = `Prediction: ${data.prediction}`;
+                        drawVisualization(data.probabilities, scaledCanvas);
+                    } else {
+                        predictionResult.textContent = 'Error';
+                    }
+                })
+                .catch(error => console.error('Error during prediction:', error));
+            }
+
+            const debouncedPredict = debounce(predict, 300);
+            drawingCanvas.addEventListener('mousedown', startDrawing);
+            drawingCanvas.addEventListener('mousemove', draw);
+            drawingCanvas.addEventListener('mouseup', stopDrawing);
+            drawingCanvas.addEventListener('mouseleave', stopDrawing);
+            drawingCanvas.addEventListener('touchstart', startDrawing);
+            drawingCanvas.addEventListener('touchmove', draw);
+            drawingCanvas.addEventListener('touchend', stopDrawing);
+            clearBtn.addEventListener('click', clearCanvas);
+            modelSelector.addEventListener('change', debouncedPredict);
+
+            populateModels();
+            drawVisualization(new Array(10).fill(0), scaledCanvas);
+        });
+    </script>
+</body>
+</html>
