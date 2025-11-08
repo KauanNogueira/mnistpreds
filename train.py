@@ -6,12 +6,12 @@ from torchvision.transforms import ToTensor
 
 from model import LinearClassifierModel
 
-EPOCHS = 35
+EPOCHS = 300
 LEARNING_RATE = 0.1
 BATCH_SIZE = 32
 INPUT_FEATURES = 28*28
 OUTPUT_FEATURES = 10
-MODEL_SAVE_PATH = "model.pth"
+MODEL_SAVE_PATH = "model300e.pth"
 
 device = "cpu"
 print("Selected device:", device)
@@ -54,7 +54,7 @@ def train_model(model, epochs, optimizer, loss_fn, train_loader, test_loader):
             optimizer.step()
 
         if epoch % 5 == 0 or epoch == epochs - 1:
-            print(f"Epoch {epoch + 1}/{epochs} completed. Training loss: {train_loss:.4f} | Test loss: {test_loss:.4f}")
+            print(f"Epoch {epoch+1}/{epochs}, Training loss: {train_loss/len(train_loader):.4f}")
         
         train_loss /= len(train_loader)
 

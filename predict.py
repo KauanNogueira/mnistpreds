@@ -8,7 +8,7 @@ from model import LinearClassifierModel
 
 INPUT_FEATURES = 28*28
 OUTPUT_FEATURES = 10
-MODEL_SAVE_PATH = "model.pth"
+MODEL_SAVE_PATH = "models/model80e.pth"
 
 device = "cpu"
 
@@ -30,7 +30,7 @@ def plot_predictions(model, data, save_path="test.png"):
     plt.figure(figsize=(10,10))
     plt.suptitle("Model Prediction vs. Ground Truth", fontsize=16, y=1.02)
 
-    rng = np.random.default_rng(5)
+    rng = np.random.default_rng()
     indices =rng.choice(len(data), size=9, replace=False)
 
     for i, idx in enumerate(indices):
