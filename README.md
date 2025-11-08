@@ -65,7 +65,13 @@ This method provides a dynamic, real-time prediction experience by allowing you 
 2.  Once the server is running, open the `index.html` file in your web browser.
 3.  Select an available model from the dropdown menu, draw a digit on the canvas, and the model's prediction will appear alongside a visualization of the neuron activations.
 
-## 4. Project File Structure
+## 5. Results
+
+After training and running the `predict.py` script, a visualization of the model's predictions on a random sample of 9 images from the test set is generated. The title of each subplot indicates the predicted label and the true label, with green for correct predictions and red for incorrect ones.
+
+![MNIST Predictions](./mnist_predictions.png)
+
+## 6. Project File Structure
 
 ```
 /
